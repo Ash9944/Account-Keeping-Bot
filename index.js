@@ -9,52 +9,64 @@ if (!bot) {
   process.exit(0, "Couldn't connect to Telegram Bot")
 }
 
-bot.onText(/signup (.+)/, async function onEchoText(msg, match) {
+bot.onText(/start/, async function onEchoText(msg) {
   try {
     if (!msg.chat.id) {
       throw new Error('Error')
     }
-    await userServices.signup(match[1],msg);
-    bot.sendMessage(msg.chat.id , "Welcome to the TG Account Bot Your Account has been created");
+
+    await userServices.signup(msg);
+    bot.sendMessage(msg.chat.id, "Welcome to the TG Account Bot Your Account has been created");
   } catch (error) {
-    bot.sendMessage(msg.chat.id,error.message)
+    bot.sendMessage(msg.chat.id, error.message)
   }
 });
 
-bot.onText(/update (.+)/, async function onEchoText(msg, match) {
+bot.onText(/update/, async function onEchoText(msg) {
   try {
     if (!msg.chat.id) {
       throw new Error('Error')
     }
 
-    var response = await userServices.update(match[1],msg,bot);
+    var response = await userServices.update(msg, bot);
     bot.sendMessage(msg.chat.id, "Updated user");
   } catch (error) {
     bot.sendMessage(msg.chat.id, error.message)
   }
 });
 
-bot.onText(/fetchdebit/, async function onEchoText(msg, match) {
+bot.onText(/fetchdebit/, async function onEchoText(msg) {
   try {
     if (!msg.chat.id) {
       throw new Error('Error')
     }
 
-    var response = await userServices.fetchUserDebitTransactions(msg.chat.id);
+    var response = await userServices.fetchUserDebit(msg.chat.id);
     bot.sendMessage(msg.chat.id, response);
   } catch (error) {
     bot.sendMessage(msg.chat.id, error.message)
   }
 });
 
-bot.onText(/fetchcredit/, async function onEchoText(msg, match) {
+bot.onText(/fetchcredit/, async function onEchoText(msg) {
   try {
     if (!msg.chat.id) {
       throw new Error('Error')
     }
 
-    var response = await userServices.fetchUserCreditTransactions(msg.chat.id);
+    var response = await userServices.fetchUserCredit(msg.chat.id);
     bot.sendMessage(msg.chat.id, response);
+  } catch (error) {
+    bot.sendMessage(msg.chat.id, error.message)
+  }
+});
+
+bot.onText(/creditDetails/, async function onEchoText(msg) {
+  try {
+    if (!msg.chat.id) {
+      throw new Error('Error')
+    }
+    await userServices.fetchUserCreditTransactions(msg,bot);
   } catch (error) {
     bot.sendMessage(msg.chat.id, error.message)
   }
