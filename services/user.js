@@ -10,12 +10,7 @@ async function singnup(details) {
 
         let isExist = await isExistUser(details.chat.id);
         if (isExist) {
-            throw new Error('User already exists');
-        }
-
-        let isExistInDevice = await userDao.count({ 'chatId': details.chat.id });
-        if (isExistInDevice) {
-            throw new Error('This Device Already Has a user');
+            throw new Error('You are already a member of this bot');
         }
 
         let user = {
@@ -38,11 +33,14 @@ async function update(updaterDetails, bot) {
         if (!updaterUser) {
             throw new Error('You Are Not Signed up');
         }
-        let users = await userDao.getBy({ "chatId": { "$ne": updaterDetails.chat.id } });
-        let buttons = users.map(item => { return { text: item.name, callback_data: item.chatId } });
+
+        let users = await transactiondao.distinct( 'updatedFor.name',{"updatedBy.chatId":  updaterDetails.chat.id  });
+
+        let buttons = users.map(item => { return { text: item, callback_data: item } });
         const keyboard = {
             inline_keyboard: [
-                buttons
+                buttons,
+                [{ text: "List users", callback_data: "LIST" }]
             ]
         };
         // Send a message with the inline keyboard
@@ -50,7 +48,28 @@ async function update(updaterDetails, bot) {
 
         let result = await listencallbackQueries(bot, updaterDetails.chat, users);
 
-        let userToupdate = await userDao.getOne({ "chatId": parseInt(result.data) })
+        if(result.data === "LIST"){
+            bot.deleteMessage(updaterDetails.chat.id, result.message.message_id);
+
+            let changedUsers = await userDao.distinct("name", { "name": { "$nin": users }, "chatId": { "$ne": updaterDetails.chat.id } });
+            if (!changedUsers.length) {
+                throw new Error('There are no users to update ! Share it with your friends @tg1998bot@');
+            }
+
+            let changedButtons = changedUsers.map(item => { return { text: item, callback_data: item } });
+            const keyboard = {
+                inline_keyboard: [
+                    changedButtons,
+                ]
+            };
+            // Send a message with the inline keyboard
+            bot.sendMessage(updaterDetails.chat.id, 'Choose a user to update amount:', { reply_markup: keyboard });
+
+            result = await listencallbackQueries(bot, updaterDetails.chat, users);
+
+        }
+
+        let userToupdate = await userDao.getOne({ "name": result.data})
 
         bot.sendMessage(updaterDetails.chat.id, `To update ${userToupdate.name} type : amount,reason\nEg : 2000,Restaurant split`);
 
@@ -97,7 +116,9 @@ async function update(updaterDetails, bot) {
             throw new Error('No transactions Made Yet')
         }
 
-        bot.sendMessage(userToupdate.chatId, `Your outstanding amount to ${updaterDetails.from.first_name} Is ${outstandingAmount[0].outstandingAmount} \n You Have been Updated ${amount} for ${reason} on ${moment(transactionDetail.transactedOn).format('DD/MM/YYYY')}`)
+        bot.sendMessage(userToupdate.chatId, `Your outstanding amount to ${updaterDetails.from.first_name} Is ${outstandingAmount[0].outstandingAmount} \n You Have been Updated ${amount} for ${reason} on ${moment(transactionDetail.transactedOn).format("DD/MMM/YY hh:mm A")}`);
+
+        bot.sendMessage(updaterDetails.chat.id, "Updated user");
 
     } catch (error) {
         return Promise.reject(error);
@@ -134,7 +155,7 @@ async function fetchUserCredit(chatId) {
         ]
         var outstandingAmount = await transactiondao.aggregate(outstandingAmountPipeline);
         if (!outstandingAmount.length) {
-            throw new Error('No transactions Made Yet')
+            throw new Error('Update a user using command /update');
         }
 
         for (let i = 0; i < outstandingAmount.length; i++) {
@@ -211,21 +232,26 @@ async function fetchUserCreditTransactions(details,bot){
             throw new Error('User Not found');
         }
 
-        let users = await userDao.getBy({ "chatId": { "$ne": user.chatId } });
-        let buttons = users.map(item => { return { text: item.name, callback_data: item.chatId } });
+        let users = await transactiondao.distinct('updatedFor.name', { "updatedBy.chatId": details.chat.id });
+        if (!users.length) {
+            throw new Error('Update a user using command /update');
+        }
+
+        let buttons = users.map(item => { return { text: item, callback_data: item } });
         const keyboard = {
             inline_keyboard: [
                 buttons
             ]
         };
-        // Send a message with the inline keyboard
-        bot.sendMessage(details.chat.id, 'Choose a user to check credit amount:', { reply_markup: keyboard });
 
-        let result = await listencallbackQueries(bot, details.chat, users);
-        let userToupdate = await userDao.getOne({ "chatId": parseInt(result.data) })
+        bot.sendMessage(details.chat.id, 'Choose a user to check credit amount:', { reply_markup: keyboard });
+        let result = await listencallbackQueries(bot, details.chat);
+
+        let userToupdate = await userDao.getOne({ "name": result.data });
+
         var outstandingAmountPipeline = [
             {
-                "$match": { "updatedBy.chatId": details.chat.id, "updatedFor.chatId": parseInt(result.data) }
+                "$match": { "updatedBy.chatId": details.chat.id, "updatedFor.name": result.data }
             },
             {
                 "$sort" : {"_id" : -1}
@@ -242,17 +268,71 @@ async function fetchUserCreditTransactions(details,bot){
         var outstandingAmount = await transactiondao.aggregate(outstandingAmountPipeline);
         var msg = `The Credit amount Details of ${userToupdate.name}:\nTotal Amount To pay you: ${outstandingAmount[0].outstandingAmount}\n`;
         for(var i = 0; i < outstandingAmount[0].details.length; i++){
-            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM HH:mm")} - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
+            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM/YY hh:mm A") } - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
         }
         bot.sendMessage(details.chat.id, msg);
 
     } catch (error) {
-
+        return Promise.reject(error);
     }
 }
+
+async function fetchUserDebitTransactions(details, bot) {
+    try {
+
+        let user = await userDao.getOne({ "chatId": details.chat.id });
+        if (!user) {
+            throw new Error('User Not found');
+        }
+
+        let users = await transactiondao.distinct('updatedBy.name', { "updatedFor.chatId": details.chat.id });
+        if (!users.length) {
+            throw new Error('You have no one to pay for');
+        }
+        let buttons = users.map(item => { return { text: item, callback_data: item } });
+        const keyboard = {
+            inline_keyboard: [
+                buttons
+            ]
+        };
+
+        bot.sendMessage(details.chat.id, 'Choose a user to fetch your debit amount:', { reply_markup: keyboard });
+        let result = await listencallbackQueries(bot, details.chat);
+
+        let userToupdate = await userDao.getOne({ "name": result.data });
+
+        var outstandingAmountPipeline = [
+            {
+                "$match": { "updatedFor.chatId": details.chat.id, "updatedBy.name": result.data }
+            },
+            {
+                "$sort": { "_id": -1 }
+            },
+            {
+                "$group": {
+                    "_id": null,
+                    "outstandingAmount": { $sum: '$updatedAmount' },
+                    "details": { '$push': "$$ROOT" },
+                    "count": { $sum: 1 }
+                }
+            }
+        ]
+        var outstandingAmount = await transactiondao.aggregate(outstandingAmountPipeline);
+        var msg = `The Debit amount Details of ${userToupdate.name}:\nTotal Amount you have to pay: ${outstandingAmount[0].outstandingAmount}\n`;
+        for (var i = 0; i < outstandingAmount[0].details.length; i++) {
+            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM/YY hh:mm A")} - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
+        }
+        bot.sendMessage(details.chat.id, msg);
+
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
 
 module.exports.signup = singnup;
 module.exports.update = update;
 module.exports.fetchUserDebit = fetchUserDebit;
 module.exports.fetchUserCredit = fetchUserCredit;
 module.exports.fetchUserCreditTransactions = fetchUserCreditTransactions;
+module.exports.fetchUserDebitTransactions = fetchUserDebitTransactions;

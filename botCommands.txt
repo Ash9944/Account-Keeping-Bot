@@ -1,0 +1,6 @@
+start - sign up to this bot
+update - add/reduce amount for user
+fetchcredit - get summary on who has to pay you
+fetchdebit - get summary on your loans
+creditdetails - fetches credit details in detailed version
+debitdetails - fetched debit details in detailed version
