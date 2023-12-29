@@ -1,0 +1,21 @@
+{
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/public/bower_components": true,
+        "**/public/dist": true
+    },
+    "editor": {
+        "tabSize": 4,
+        "linkedEditing": true,
+        "formatOnPaste": true,
+        "formatOnSave": true
+    },
+    "files": {
+        "trimFinalNewlines": true,
+        "trimTrailingWhitespace": true
+    },
+    "[markdown]": {
+        "files.trimTrailingWhitespace": false
+    },
+    "javascript.suggest.autoImports": false
+}
