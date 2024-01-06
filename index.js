@@ -29,7 +29,7 @@ bot.onText(/update/, async function onEchoText(msg) {
     }
 
     await userServices.update(msg, bot);
-    
+
   } catch (error) {
     bot.sendMessage(msg.chat.id, error.message)
   }
@@ -83,13 +83,3 @@ bot.onText(/debitdetails/, async function onEchoText(msg) {
   }
 });
 
-bot.onText(/init/, async function onEchoText(msg) {
-  try {
-    if (!msg.chat.id) {
-      throw new Error('Error')
-    }
-    await userServices.initateFirstTranaction(msg, bot);
-  } catch (error) {
-    bot.sendMessage(msg.chat.id, error.message)
-  }
-});

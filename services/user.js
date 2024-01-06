@@ -34,46 +34,52 @@ async function update(updaterDetails, bot) {
             throw new Error('You Are Not Signed up');
         }
 
-        let users = await transactiondao.distinct( 'updatedFor.name',{"updatedBy.chatId":  updaterDetails.chat.id  });
+        let users = await transactiondao.distinct('updatedFor.name', { "updatedBy.chatId": updaterDetails.chat.id });
 
         let buttons = users.map(item => { return { text: item, callback_data: item } });
+        buttons =  splitArray(buttons ,3)
+        buttons.push([{ text: "List users", callback_data: "LIST" }])
         const keyboard = {
-            inline_keyboard: [
-                buttons,
-                [{ text: "List users", callback_data: "LIST" }]
-            ]
+            inline_keyboard:buttons,
         };
         // Send a message with the inline keyboard
-        bot.sendMessage(updaterDetails.chat.id, 'Choose a user to update amount:', { reply_markup: keyboard });
+        var msgDetails = await bot.sendMessage(updaterDetails.chat.id, 'Choose a user to update amount:', { reply_markup: keyboard });
 
-        let result = await listencallbackQueries(bot, updaterDetails.chat, users);
+        let result = await listencallbackQueries(bot, msgDetails);
 
-        if(result.data === "LIST"){
+        if (result.data === "LIST") {
             bot.deleteMessage(updaterDetails.chat.id, result.message.message_id);
 
             let changedUsers = await userDao.distinct("name", { "name": { "$nin": users }, "chatId": { "$ne": updaterDetails.chat.id } });
             if (!changedUsers.length) {
-                throw new Error('There are no users to update ! Share it with your friends @tg1998bot@');
+                throw new Error('There are no users to update ! Share it with your friends @tg1998bot');
             }
 
             let changedButtons = changedUsers.map(item => { return { text: item, callback_data: item } });
+            changedButtons = splitArray(changedButtons, 3)
             const keyboard = {
-                inline_keyboard: [
-                    changedButtons,
-                ]
+                inline_keyboard: changedButtons
+
             };
             // Send a message with the inline keyboard
-            bot.sendMessage(updaterDetails.chat.id, 'Choose a user to update amount:', { reply_markup: keyboard });
+            msgDetails = await bot.sendMessage(updaterDetails.chat.id, 'Choose a user to update amount:', { reply_markup: keyboard });
 
-            result = await listencallbackQueries(bot, updaterDetails.chat, users);
-
+            var secondResult = await listencallbackQueries(bot, msgDetails);
+            if (!secondResult) {
+                return;
+            }
+        }
+        if (!result) {
+            return;
         }
 
-        let userToupdate = await userDao.getOne({ "name": result.data})
-
-        bot.sendMessage(updaterDetails.chat.id, `To update ${userToupdate.name} type : amount,reason\nEg : 2000,Restaurant split`);
-
-        let amountResp = await listenMessages(bot, updaterDetails.chat);
+        let query = (secondResult?.data || result.data)
+        let userToupdate = await userDao.getOne({ "name": query })
+        if (!userToupdate) {
+            return;
+        }
+        var msg = await bot.sendMessage(updaterDetails.chat.id, `To update ${userToupdate.name} type : amount,reason,date of transaction(DD/MM/YY) : optional\nEg : 2000,Restaurant split,3/12/23 : optional`);
+        let amountResp = await listenMessages(bot, msg);
 
         var arr = amountResp.text.split(',')
         if (!arr.length) {
@@ -86,12 +92,21 @@ async function update(updaterDetails, bot) {
         }
 
         var reason = arr[1];
-        if (!reason) {
+        if (!reason && moment(reason, 'DD/MM/YY', true).isValid()) {
             throw new Error("No reason Found");
         }
 
+        if(arr[2]){
+            var isCorrectDate = moment(arr[2], 'DD/MM/YY', true).isValid();
+            if(!isCorrectDate){
+                throw new Error("Please Enter a valid Date of Tansaction")
+            }
+            var dateStr = moment(arr[2], 'DD/MM/YY').format("YYYY-MM-DD");
+            var date = new Date(dateStr)
+        }
+
         var transactionDetail = {
-            "transactedOn": new Date(),
+            "transactedOn": date || new Date(),
             "updatedBy": updaterUser,
             "updatedAmount": amount,
             "description": reason,
@@ -204,27 +219,25 @@ async function fetchUserDebit(chatId) {
     }
 }
 
-function listencallbackQueries(bot, chatId) {
+function listencallbackQueries(bot, chat) {
     return new Promise((resolve, reject) => {
-        bot.on('callback_query', (msg) => {
-            if (msg.from.id === chatId.id) {
+        bot.on('callback_query', async (msg) => {
+            if (msg.message.message_id === chat.message_id) {
                 return resolve(msg);
             }
         })
     })
 }
 
-function listenMessages(bot, chatId) {
+function listenMessages(bot, chat) {
     return new Promise((resolve, reject) => {
         bot.on('message', (msg) => {
-            if (msg.from.id === chatId.id) {
                 return resolve(msg);
-            }
         })
     })
 }
 
-async function fetchUserCreditTransactions(details,bot){
+async function fetchUserCreditTransactions(details, bot) {
     try {
 
         let user = await userDao.getOne({ "chatId": details.chat.id });
@@ -244,8 +257,8 @@ async function fetchUserCreditTransactions(details,bot){
             ]
         };
 
-        bot.sendMessage(details.chat.id, 'Choose a user to check credit amount:', { reply_markup: keyboard });
-        let result = await listencallbackQueries(bot, details.chat);
+        var msgDetails = await bot.sendMessage(details.chat.id, 'Choose a user to check credit amount:', { reply_markup: keyboard });
+        let result = await listencallbackQueries(bot, msgDetails);
 
         let userToupdate = await userDao.getOne({ "name": result.data });
 
@@ -254,21 +267,21 @@ async function fetchUserCreditTransactions(details,bot){
                 "$match": { "updatedBy.chatId": details.chat.id, "updatedFor.name": result.data }
             },
             {
-                "$sort" : {"_id" : -1}
+                "$sort": { "transactedOn": -1 }
             },
             {
                 "$group": {
                     "_id": null,
                     "outstandingAmount": { $sum: '$updatedAmount' },
-                    "details" : {'$push' :"$$ROOT"},
+                    "details": { '$push': "$$ROOT" },
                     "count": { $sum: 1 }
                 }
             }
         ]
         var outstandingAmount = await transactiondao.aggregate(outstandingAmountPipeline);
         var msg = `The Credit amount Details of ${userToupdate.name}:\nTotal Amount To pay you: ${outstandingAmount[0].outstandingAmount}\n`;
-        for(var i = 0; i < outstandingAmount[0].details.length; i++){
-            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM/YY hh:mm A") } - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
+        for (var i = 0; i < outstandingAmount[0].details.length; i++) {
+            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM/YY hh:mm A")} - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
         }
         bot.sendMessage(details.chat.id, msg);
 
@@ -296,8 +309,8 @@ async function fetchUserDebitTransactions(details, bot) {
             ]
         };
 
-        bot.sendMessage(details.chat.id, 'Choose a user to fetch your debit amount:', { reply_markup: keyboard });
-        let result = await listencallbackQueries(bot, details.chat);
+        var msgDetails = bot.sendMessage(details.chat.id, 'Choose a user to fetch your debit amount:', { reply_markup: keyboard });
+        let result = await listencallbackQueries(bot, msgDetails);
 
         let userToupdate = await userDao.getOne({ "name": result.data });
 
@@ -306,7 +319,7 @@ async function fetchUserDebitTransactions(details, bot) {
                 "$match": { "updatedFor.chatId": details.chat.id, "updatedBy.name": result.data }
             },
             {
-                "$sort": { "_id": -1 }
+                "$sort": { "transactedOn": -1 }
             },
             {
                 "$group": {
@@ -329,6 +342,27 @@ async function fetchUserDebitTransactions(details, bot) {
     }
 }
 
+function splitArray(arr, numberOfElements) {
+    var mainArr = [];
+    var subArray = [];
+    arr.forEach((item, ind) => {
+        subArray.push(item);
+
+        if ((ind + 1) % numberOfElements === 0) {
+            mainArr.push(subArray);
+            subArray = [];
+            return;
+        }
+
+        if ((ind + 1) === arr.length) {
+            mainArr.push(subArray);
+            subArray = [];
+            return;
+        }
+    })
+
+    return mainArr
+}
 
 module.exports.signup = singnup;
 module.exports.update = update;
