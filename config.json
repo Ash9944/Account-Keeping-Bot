@@ -1,4 +1,15 @@
 {
-    "tokenId" : "6345504433:AAFjMAIvsckAQcIWwdZNRLjPmJldAn3FSkA",
-    "dbUrl" : "mongodb://localhost:27017/telegramBot"
+    "tokenId" : "6304823400:AAGoqvEE_GZoVexP4TK3bkwikkfYh73HJOU",
+    "dbUrl" : "mongodb://localhost:27017/telegramBot-test",
+    "logConfig": {
+        "appLog": {
+            "streamConfig": {
+                "type": "rotating-file",
+                "fname": "app.log",
+                "period": "1d",
+                "count": 2,
+                "level": "debug"
+            }
+        }
+    }
 }
