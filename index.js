@@ -28,8 +28,8 @@ bot.onText(/update/, async function onEchoText(msg) {
       throw new Error('Error')
     }
 
-    var response = await userServices.update(msg, bot);
-    bot.sendMessage(msg.chat.id, "Updated user");
+    await userServices.update(msg, bot);
+
   } catch (error) {
     bot.sendMessage(msg.chat.id, error.message)
   }
@@ -61,7 +61,7 @@ bot.onText(/fetchcredit/, async function onEchoText(msg) {
   }
 });
 
-bot.onText(/creditDetails/, async function onEchoText(msg) {
+bot.onText(/creditdetails/, async function onEchoText(msg) {
   try {
     if (!msg.chat.id) {
       throw new Error('Error')
@@ -71,3 +71,15 @@ bot.onText(/creditDetails/, async function onEchoText(msg) {
     bot.sendMessage(msg.chat.id, error.message)
   }
 });
+
+bot.onText(/debitdetails/, async function onEchoText(msg) {
+  try {
+    if (!msg.chat.id) {
+      throw new Error('Error')
+    }
+    await userServices.fetchUserDebitTransactions(msg, bot);
+  } catch (error) {
+    bot.sendMessage(msg.chat.id, error.message)
+  }
+});
+
