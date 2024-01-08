@@ -3,7 +3,6 @@ import { transactionDao, Transactions } from "../daos/transactions";
 import { getNextSequence } from '../daos/mongoDbUtil'
 import * as moment from "moment";
 
-
 export async function signup(details: any): Promise<Object> {
     try {
         if (!details?.chat.id) {
@@ -109,7 +108,7 @@ export async function update(updaterDetails: any, bot: any): Promise<void> {
             var date: any = new Date(dateStr)
         }
 
-        var transactionId = await getNextSequence('transactions','transactionId');
+        var transactionId = await getNextSequence('transactions', 'transactionId');
         var transactionDetail: Transactions = {
             "transactionId": transactionId.toString(),
             "transactedOn": date || new Date(),
@@ -132,15 +131,9 @@ export async function update(updaterDetails: any, bot: any): Promise<void> {
                 }
             }
         ]
-        var outstandingAmount : any = await transactionDao.aggregate(outstandingAmountPipeline);
+        var outstandingAmount: any = await transactionDao.aggregate(outstandingAmountPipeline);
         if (!outstandingAmount.length) {
             throw new Error('No transactions Made Yet')
-        }
-        var updateTotalAmount: any = await transactionDao.updateOne({ "transactionId": transactionId.toString() },'SET' ,{
-            "totalAmount": outstandingAmount[0].outstandingAmount
-        })
-        if (!updateTotalAmount){
-            throw new Error("Failed to update transaction")
         }
 
         bot.sendMessage(userToupdate.chatId, `Your outstanding amount to ${updaterDetails.from.first_name} Is ${outstandingAmount[0].outstandingAmount} \n You Have been Updated ${amount} for ${reason} on ${moment(transactionDetail.transactedOn).format("DD/MMM/YY hh:mm A")}`);
@@ -152,7 +145,7 @@ export async function update(updaterDetails: any, bot: any): Promise<void> {
     }
 }
 
-export async function fetchUserDebit(chatId : number) : Promise<string> {
+export async function fetchUserDebit(chatId: number): Promise<string> {
     try {
         let msg = "";
         let user = await userDao.getOne({ "chatId": chatId });
@@ -172,7 +165,7 @@ export async function fetchUserDebit(chatId : number) : Promise<string> {
                 }
             }
         ]
-        var outstandingAmount : Array<any> = await transactionDao.aggregate(outstandingAmountPipeline);
+        var outstandingAmount: Array<any> = await transactionDao.aggregate(outstandingAmountPipeline);
         if (!outstandingAmount.length) {
             throw new Error('No transactions Made Yet')
         }
@@ -187,10 +180,10 @@ export async function fetchUserDebit(chatId : number) : Promise<string> {
     }
 }
 
-export async function fetchUserCredit(chatId: number) {
+export async function fetchUserCredit(chatId: number): Promise<string> {
     try {
         let msg = "";
-        let user : any = await userDao.getOne({ "chatId": chatId });
+        let user: any = await userDao.getOne({ "chatId": chatId });
         if (!user) {
             throw new Error('User Not found');
         }
@@ -207,13 +200,13 @@ export async function fetchUserCredit(chatId: number) {
                 }
             }
         ]
-        var outstandingAmount : Array<any> = await transactionDao.aggregate(outstandingAmountPipeline);
+        var outstandingAmount: Array<any> = await transactionDao.aggregate(outstandingAmountPipeline);
         if (!outstandingAmount.length) {
             throw new Error('Update a user using command /update');
         }
 
         for (let i = 0; i < outstandingAmount.length; i++) {
-            let userName : any = await userDao.getOne({ "chatId": outstandingAmount[i]._id.userId });
+            let userName: any = await userDao.getOne({ "chatId": outstandingAmount[i]._id.userId });
             msg += `${userName.name} has to pay you ${outstandingAmount[i].outstandingAmount}\n`
         }
 
@@ -223,6 +216,109 @@ export async function fetchUserCredit(chatId: number) {
     }
 }
 
+export async function fetchUserCreditTransactions(details: any, bot: any) : Promise<void> {
+    try {
+
+        let user: any = await userDao.getOne({ "chatId": details.chat.id });
+        if (!user) {
+            throw new Error('User Not found');
+        }
+
+        let users = await transactionDao.distinct('updatedFor.name', { "updatedBy.chatId": details.chat.id });
+        if (!users.length) {
+            throw new Error('Update a user using command /update');
+        }
+
+        let buttons = users.map(item => { return { text: item, callback_data: item } });
+        const keyboard = {
+            inline_keyboard: [
+                buttons
+            ]
+        };
+
+        var msgDetails = await bot.sendMessage(details.chat.id, 'Choose a user to check credit amount:', { reply_markup: keyboard });
+        let result: any = await listencallbackQueries(bot, msgDetails);
+
+        let userToupdate: any = await userDao.getOne({ "name": result.data });
+
+        var outstandingAmountPipeline = [
+            {
+                "$match": { "updatedBy.chatId": details.chat.id, "updatedFor.name": result.data }
+            },
+            {
+                "$sort": { "transactedOn": -1 }
+            },
+            {
+                "$group": {
+                    "_id": null,
+                    "outstandingAmount": { $sum: '$updatedAmount' },
+                    "details": { '$push': "$$ROOT" },
+                    "count": { $sum: 1 }
+                }
+            }
+        ]
+        var outstandingAmount: any = await transactionDao.aggregate(outstandingAmountPipeline);
+        var msg = `The Credit amount Details of ${userToupdate.name}:\nTotal Amount To pay you: ${outstandingAmount[0].outstandingAmount}\n`;
+        for (var i = 0; i < outstandingAmount[0].details.length; i++) {
+            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM/YY hh:mm A")} - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
+        }
+        bot.sendMessage(details.chat.id, msg);
+
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+export async function fetchUserDebitTransactions(details: any, bot: any): Promise<void>  {
+    try {
+        let user = await userDao.getOne({ "chatId": details.chat.id });
+        if (!user) {
+            throw new Error('User Not found');
+        }
+
+        let users = await transactionDao.distinct('updatedBy.name', { "updatedFor.chatId": details.chat.id });
+        if (!users.length) {
+            throw new Error('You have no one to pay for');
+        }
+        let buttons = users.map(item => { return { text: item, callback_data: item } });
+        const keyboard = {
+            inline_keyboard: [
+                buttons
+            ]
+        };
+
+        var msgDetails = bot.sendMessage(details.chat.id, 'Choose a user to fetch your debit amount:', { reply_markup: keyboard });
+        let result: any = await listencallbackQueries(bot, msgDetails);
+
+        let userToupdate: any = await userDao.getOne({ "name": result.data });
+
+        var outstandingAmountPipeline = [
+            {
+                "$match": { "updatedFor.chatId": details.chat.id, "updatedBy.name": result.data }
+            },
+            {
+                "$sort": { "transactedOn": -1 }
+            },
+            {
+                "$group": {
+                    "_id": null,
+                    "outstandingAmount": { $sum: '$updatedAmount' },
+                    "details": { '$push': "$$ROOT" },
+                    "count": { $sum: 1 }
+                }
+            }
+        ]
+        var outstandingAmount: Array<any> = await transactionDao.aggregate(outstandingAmountPipeline);
+        var msg = `The Debit amount Details of ${userToupdate.name}:\nTotal Amount you have to pay: ${outstandingAmount[0].outstandingAmount}\n`;
+        for (var i = 0; i < outstandingAmount[0].details.length; i++) {
+            msg += `${moment(outstandingAmount[0].details[i].transactedOn).format("DD/MMM/YY hh:mm A")} - ${outstandingAmount[0].details[i].updatedAmount} For ${outstandingAmount[0].details[i].description} \n`
+        }
+        bot.sendMessage(details.chat.id, msg);
+
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
 
 function splitArray(arr: Array<any>, numberOfElements: number): Array<Array<any>> {
 
