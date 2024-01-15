@@ -1,4 +1,4 @@
 {
-    "tokenId" : "6304823400:AAGoqvEE_GZoVexP4TK3bkwikkfYh73HJOU",
-    "dbUrl" : "mongodb://127.0.0.1:27019/telegramBot"
+    "tokenId": "6345504433:AAFjMAIvsckAQcIWwdZNRLjPmJldAn3FSkA",
+    "dbUrl": "mongodb://localhost:27017/telegramBot"
 }
