@@ -287,7 +287,7 @@ export async function fetchUserDebitTransactions(details: any, bot: any): Promis
             ]
         };
 
-        var msgDetails = bot.sendMessage(details.chat.id, 'Choose a user to fetch your debit amount:', { reply_markup: keyboard });
+        var msgDetails = await bot.sendMessage(details.chat.id, 'Choose a user to fetch your debit amount:', { reply_markup: keyboard });
         let result: any = await listencallbackQueries(bot, msgDetails);
 
         let userToupdate: any = await userDao.getOne({ "name": result.data });
