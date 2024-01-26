@@ -1,4 +1,5 @@
 {
     "tokenId": "6304823400:AAGoqvEE_GZoVexP4TK3bkwikkfYh73HJOU",
-    "dbUrl": "mongodb://127.0.0.1:27019/telegramBot-test"
+    "dbUrl": "mongodb://127.0.0.1:27019/telegramBot-test",
+    "dbName": "telegramBot-test"
 }

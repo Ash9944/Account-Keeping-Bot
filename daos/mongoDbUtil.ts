@@ -1,6 +1,7 @@
-import { MongoClient, Db, ObjectId, Collection } from 'mongodb'
-import { dbUrl } from '../config.json'
+import { MongoClient, Db, ObjectId, Collection, ServerApiVersion } from 'mongodb'
+import { dbUrl , dbName } from '../config.json'
 const mongoClient = new MongoClient(dbUrl);
+
 export const ObjectID = ObjectId
 interface dbCache {
     db: any;
@@ -11,7 +12,7 @@ const dbCache: dbCache = { "db": {} };
 export async function connect(): Promise<Db> {
     try {
         let _client: any = await mongoClient.connect();
-        dbCache.db = _client.db();
+        dbCache.db = _client.db(dbName);
         console.log(`Connection with mongodb successful And The Bot is On - ${new Date().toString()}`);
         return dbCache.db;
     } catch (error) {

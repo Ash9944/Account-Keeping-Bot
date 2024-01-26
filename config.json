@@ -1,4 +1,5 @@
 {
     "tokenId": "6345504433:AAFjMAIvsckAQcIWwdZNRLjPmJldAn3FSkA",
-    "dbUrl": "mongodb://localhost:27017/telegramBot"
+    "dbUrl": "mongodb+srv://ash99449:919944902340@cluster0.gjs7tw8.mongodb.net/?retryWrites=true&w=majority",
+    "dbName" : "telegramBot"
 }
